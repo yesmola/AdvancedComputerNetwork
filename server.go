@@ -24,12 +24,12 @@ func main() {
 		return
 	}
 	for {
-		_, remoteaddr, err := ser.ReadFromUDP(p)
-		fmt.Printf("Read a message from %v %s \n", remoteaddr, p)
+		_, remoteAddr, err := ser.ReadFromUDP(p)
+		fmt.Printf("Read a message from %v %s \n", remoteAddr, p)
 		if err != nil {
 			fmt.Printf("Some error  %v", err)
 			continue
 		}
-		go sendResponse(ser, remoteaddr)
+		go sendResponse(ser, remoteAddr)
 	}
 }
