@@ -16,7 +16,7 @@ import (
 const Unreachable = 16
 
 type TableValue struct {
-	Dist int
+	Dist  int
 	Route []string
 }
 type Router struct {
@@ -61,27 +61,43 @@ func (r *Router) server() {
 			fmt.Println("Some error", err)
 			continue
 		}
-
-		var Message Router
-		buffer := bytes.NewBuffer(p)
-		decoder := gob.NewDecoder(buffer)
-		err = decoder.Decode(&Message)
-		if err != nil {
-			fmt.Println("Some error", err)
-			continue
-		}
-		log.Println("Read a message from", remoteAddr.Port, Message)
-
-		// update routing table
-		remotePort := remoteAddr.Port - 1000
-		remoteId := string(p)
-		_, ok := r.RoutingTable[remoteId]
-		// if that router is not in routing table
-		if ok == false && r.isNeighbour(remotePort) {
-			r.RoutingTable[remoteId] = TableValue{
-				Dist: 1,
-				Route: []string{remoteId},
+		remotePort := remoteAddr.Port
+		// use port 400X to send routing table
+		// use port 500X to send data packet
+		if remotePort >4000 && remotePort<5000 {
+			var Message Router
+			buffer := bytes.NewBuffer(p)
+			decoder := gob.NewDecoder(buffer)
+			err = decoder.Decode(&Message)
+			if err != nil {
+				fmt.Println("Some error", err)
+				continue
 			}
+			log.Println("Read a router message from", remoteAddr.Port)
+			fmt.Print("> ")
+
+			// update routing table
+			remoteId := Message.Id
+			for k, v := range Message.RoutingTable {
+				_, ok := r.RoutingTable[k]
+				// if that router is not in routing table
+				if ok == false {
+					r.RoutingTable[k] = TableValue{
+						Dist:  v.Dist + 1,
+						Route: append([]string{remoteId}, v.Route[:]...),
+					}
+				} else {
+					// if have a better router
+					if r.RoutingTable[k].Dist > v.Dist+1 {
+						r.RoutingTable[k] = TableValue{
+							Dist:  v.Dist + 1,
+							Route: append([]string{remoteId}, v.Route[:]...),
+						}
+					}
+				}
+			}
+		} else if remotePort>5000 && remotePort<6000 {
+
 		}
 		//go sendResponse(ser, remoteAddr)
 	}
@@ -111,7 +127,7 @@ func (r *Router) broadcast() {
 				return
 			}
 
-			_,err = conn.Write(buffer.Bytes())
+			_, err = conn.Write(buffer.Bytes())
 			if err != nil {
 				fmt.Println("Some error", err)
 				return
@@ -143,7 +159,7 @@ func (r *Router) isNeighbour(port int) bool {
 func (r *Router) listNBsAlive() {
 	flag := 0
 	for k, v := range r.RoutingTable {
-		if v.Dist < Unreachable {
+		if v.Dist == 1 {
 			flag = 1
 			fmt.Print(k, " ")
 		}
@@ -159,13 +175,23 @@ func (r *Router) listNBsAlive() {
  */
 func (r *Router) printRoutingTable() {
 	fmt.Println("Destination Route")
-	for k,v := range r.RoutingTable {
-		fmt.Print("     ",k,"        ",v.Route[0])
-		for i:=1;i<len(v.Route);i++ {
-			fmt.Print(","+v.Route[i])
+	for k, v := range r.RoutingTable {
+		fmt.Print("     ", k, "        ")
+		for i := 0; i < len(v.Route); i++ {
+			fmt.Print(v.Route[i])
+			if i < len(v.Route)-1 {
+				fmt.Print(",")
+			}
 		}
 		fmt.Println()
 	}
+}
+
+/*
+ * Send a data pack to destination
+ */
+func (r *Router) sendPacket(des string) {
+
 }
 
 func main() {
@@ -183,12 +209,12 @@ func main() {
 	r.Id = info[0]
 	r.Port, _ = strconv.Atoi(info[1])
 	for i := 2; i < len(info); i++ {
-		neighbourPort,_ := strconv.Atoi(info[i])
+		neighbourPort, _ := strconv.Atoi(info[i])
 		r.Neighbour = append(r.Neighbour, neighbourPort)
 	}
-	r.RoutingTable = make(map[string]TableValue,10)
+	r.RoutingTable = make(map[string]TableValue, 10)
 	r.RoutingTable[r.Id] = TableValue{
-		Dist: 0,
+		Dist:  0,
 		Route: []string{},
 	}
 	// print router state
@@ -227,7 +253,17 @@ func main() {
 			 * 1 4,3
 			 * 4 5,4
 			 */
-			 r.printRoutingTable()
+			r.printRoutingTable()
+		case "D":
+			/*
+			 * Send a data packet with a specified or default TTL value
+			 * to the destination that the number n represents.
+			 * D n
+			 */
+			if len(command) <= 1 {
+				fmt.Println("Not enough arguments to call function D")
+			}
+			r.sendPacket(command[1])
 		default:
 			fmt.Println("Unknown command")
 		}
