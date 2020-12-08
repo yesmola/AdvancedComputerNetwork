@@ -20,10 +20,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="1c1af4f1-081c-4b41-ae4b-b8574fbe22e0" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/DV_algorithm/router.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/server.go" beforeDir="false" afterPath="$PROJECT_DIR$/server.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DV_algorithm/router.go" beforeDir="false" afterPath="$PROJECT_DIR$/DV_algorithm/router.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -88,9 +86,9 @@
       <screen x="0" y="25" width="1792" height="1033" />
     </state>
     <state x="698" y="236" key="SettingsEditor/0.25.1792.1033@0.25.1792.1033" timestamp="1607342125914" />
-    <state x="561" y="254" width="670" height="676" key="search.everywhere.popup" timestamp="1607344054264">
+    <state x="561" y="254" width="670" height="676" key="search.everywhere.popup" timestamp="1607411704102">
       <screen x="0" y="25" width="1792" height="1033" />
     </state>
-    <state x="561" y="254" width="670" height="676" key="search.everywhere.popup/0.25.1792.1033@0.25.1792.1033" timestamp="1607344054264" />
+    <state x="561" y="254" width="670" height="676" key="search.everywhere.popup/0.25.1792.1033@0.25.1792.1033" timestamp="1607411704102" />
   </component>
 </project>
