@@ -14,17 +14,65 @@ import (
 )
 
 const Unreachable = 16
+const DefaultTTL = 5
+const BroadcastCycle = 5
 
-type TableValue struct {
-	Dist  int
-	Route []string
+/*
+ * @Destination: the destination of this data packet
+ * @TTL: time-to-live of this data packet
+ */
+type DataPacket struct {
+	Destination string
+	TTL         int
 }
+
+/*
+ * @Dist: the distance to the node
+ * @Route: the route to the node including the destination
+ * @Route: whether refused to pass to the node or not
+ */
+type TableValue struct {
+	Dist    int
+	Route   []string
+	Refused bool
+}
+
+/*
+ * @Id: id of this router
+ * @Port: port of the router's udp server to listen packet
+ * @Neighbour: ports of the router's neighbour's udp server to send packet
+ * @RoutingTable : routing table of this router
+ */
 type Router struct {
-	Id           string "Router's id"
-	Port         int    "Router's port"
-	Neighbour    []int  "neighbour's port"
+	Id           string
+	Port         int
+	Neighbour    []int
 	RoutingTable map[string]TableValue
 }
+
+/*
+ * UpdateBy: update routing table because of who
+ * Log: all routing table in history
+ */
+type RouterLog struct {
+	UpdateBy string
+	Log      map[string]TableValue
+}
+
+/*
+ * record all the update to routing table
+ */
+var Logs []RouterLog
+
+/*
+ * transfer route's id to its port
+ */
+var IdToPort map[string]int
+
+/*
+ * check if the neighbour is alive
+ */
+var LiveTimer map[int]int64
 
 /*
  * print router's id and port and neighbour's port
@@ -64,7 +112,7 @@ func (r *Router) server() {
 		remotePort := remoteAddr.Port
 		// use port 400X to send routing table
 		// use port 500X to send data packet
-		if remotePort >4000 && remotePort<5000 {
+		if remotePort > 4000 && remotePort < 5000 {
 			var Message Router
 			buffer := bytes.NewBuffer(p)
 			decoder := gob.NewDecoder(buffer)
@@ -76,31 +124,132 @@ func (r *Router) server() {
 			log.Println("Read a router message from", remoteAddr.Port)
 			fmt.Print("> ")
 
+			// reset neighbour's timer
+			now := time.Now().Unix()
+			LiveTimer[remotePort-1000] = now
+
 			// update routing table
 			remoteId := Message.Id
+			IdToPort[remoteId] = remotePort - 1000
+			isUpdated := false
 			for k, v := range Message.RoutingTable {
 				_, ok := r.RoutingTable[k]
 				// if that router is not in routing table
 				if ok == false {
+					isUpdated = true
 					r.RoutingTable[k] = TableValue{
-						Dist:  v.Dist + 1,
-						Route: append([]string{remoteId}, v.Route[:]...),
+						Dist:    v.Dist + 1,
+						Route:   append([]string{remoteId}, v.Route[:]...),
+						Refused: false,
 					}
 				} else {
-					// if have a better router
-					if r.RoutingTable[k].Dist > v.Dist+1 {
+					// if refused to pass k
+					if r.RoutingTable[k].Refused {
+						continue
+					}
+					// if next hop is not remote router and have a better router
+					if (len(r.RoutingTable[k].Route) == 0 ||
+						(len(r.RoutingTable[k].Route) > 0 && r.RoutingTable[k].Route[0] != remoteId)) &&
+						r.RoutingTable[k].Dist > v.Dist+1 {
+						isUpdated = true
 						r.RoutingTable[k] = TableValue{
-							Dist:  v.Dist + 1,
-							Route: append([]string{remoteId}, v.Route[:]...),
+							Dist:    v.Dist + 1,
+							Route:   append([]string{remoteId}, v.Route[:]...),
+							Refused: false,
+						}
+					} else if len(r.RoutingTable[k].Route) > 0 && r.RoutingTable[k].Route[0] == remoteId {
+						// next hop is remote router
+						isUpdated = true
+						if v.Dist == Unreachable || v.Dist+1 == Unreachable {
+							r.RoutingTable[k] = TableValue{
+								Dist:    Unreachable,
+								Route:   append([]string{remoteId}, v.Route[:]...),
+								Refused: false,
+							}
+						} else {
+							r.RoutingTable[k] = TableValue{
+								Dist:    v.Dist+1,
+								Route:   append([]string{remoteId}, v.Route[:]...),
+								Refused: false,
+							}
 						}
 					}
 				}
 			}
-		} else if remotePort>5000 && remotePort<6000 {
-
+			// record the log of update
+			if isUpdated {
+				// cannot use just := to copy a map
+				cloneRT := make(map[string]TableValue)
+				for k, v := range r.RoutingTable {
+					cloneRT[k] = v
+				}
+				newLog := RouterLog{
+					UpdateBy: remoteId,
+					Log:      cloneRT,
+				}
+				Logs = append(Logs, newLog)
+			}
+			continue
 		}
-		//go sendResponse(ser, remoteAddr)
+		if remotePort > 5000 && remotePort < 6000 {
+			var Message DataPacket
+			buffer := bytes.NewBuffer(p)
+			decoder := gob.NewDecoder(buffer)
+			err = decoder.Decode(&Message)
+			if err != nil {
+				fmt.Println("Some error", err)
+				continue
+			}
+			// if TTL=0, discard it, otherwise continue to transmit it.
+			if Message.TTL == 0 {
+				fmt.Println("time exceeded", Message.Destination)
+				continue
+			}
+			if r.Id == Message.Destination {
+				fmt.Println("Destination", Message.Destination)
+				continue
+			}
+			_, hasRouteToDes := r.RoutingTable[Message.Destination]
+			if !hasRouteToDes {
+				fmt.Println("Dropped", Message.Destination)
+				continue
+			}
+			// if refuse to pass that
+			if r.RoutingTable[Message.Destination].Refused {
+				fmt.Println("Refused to pass", Message.Destination)
+				continue
+			}
+			fmt.Println("Forward to", Message.Destination)
+			go r.sendPacket(Message.Destination, Message.TTL-1, false)
+			continue
+		}
 	}
+}
+
+/*
+ * send from lAddr to rAddr
+ * use gob to encode packet
+ */
+func (r *Router) send(lAddr *net.UDPAddr, rAddr *net.UDPAddr, packet interface{}) error {
+	conn, err := net.DialUDP("udp", lAddr, rAddr)
+	if err != nil {
+		return err
+	}
+	var buffer bytes.Buffer
+	encoder := gob.NewEncoder(&buffer)
+	err = encoder.Encode(packet)
+	if err != nil {
+		return err
+	}
+
+	_, err = conn.Write(buffer.Bytes())
+	if err != nil {
+		return err
+	}
+
+	_ = conn.Close()
+	buffer.Reset()
+	return nil
 }
 
 /*
@@ -112,31 +261,40 @@ func (r *Router) broadcast() {
 			port := r.Neighbour[i]
 			lAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:"+strconv.Itoa(r.Port+1000))
 			rAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:"+strconv.Itoa(port))
-			conn, err := net.DialUDP("udp", lAddr, rAddr)
+			err := r.send(lAddr, rAddr, r)
 
 			if err != nil {
 				fmt.Println("Some error", err)
 				return
 			}
-
-			var buffer bytes.Buffer
-			encoder := gob.NewEncoder(&buffer)
-			err = encoder.Encode(r)
-			if err != nil {
-				fmt.Println("Some error", err)
-				return
-			}
-
-			_, err = conn.Write(buffer.Bytes())
-			if err != nil {
-				fmt.Println("Some error", err)
-				return
-			}
-
-			_ = conn.Close()
-			buffer.Reset()
 		}
-		time.Sleep(3 * time.Second)
+		time.Sleep(BroadcastCycle * time.Second)
+	}
+}
+
+/*
+ * check neighbour's state
+ */
+func (r *Router) checkNeighbour() {
+	for {
+		now := time.Now().Unix()
+		for k, v := range r.RoutingTable {
+			port := IdToPort[k]
+			if r.isNeighbour(port) && now-LiveTimer[port] > 3*BroadcastCycle {
+				if v.Dist == Unreachable {
+					continue
+				}
+				r.RoutingTable[k] = TableValue{
+					Dist:    Unreachable,
+					Route:   []string{},
+					Refused: v.Refused,
+				}
+				LiveTimer[port] = now
+				log.Println(k, "is dead")
+				fmt.Print("> ")
+			}
+		}
+		time.Sleep(1 * time.Second)
 	}
 }
 
@@ -171,12 +329,112 @@ func (r *Router) listNBsAlive() {
 }
 
 /*
- * print current routing table
+ * Send a data pack to destination
  */
-func (r *Router) printRoutingTable() {
-	fmt.Println("Destination Route")
+func (r *Router) sendPacket(des string, ttl int, isSource bool) {
+	if r.RoutingTable[des].Refused {
+		fmt.Println("Refuse to pass", des)
+		return
+	}
+	isAdjacent := false
+	hasAdjacent := false
+	// check if the destination is adjacent node
+	// or this router has no adjacent node
 	for k, v := range r.RoutingTable {
-		fmt.Print("     ", k, "        ")
+		hasAdjacent = true
+		if k == des && v.Dist == 1 {
+			isAdjacent = true
+		}
+	}
+	if hasAdjacent == false {
+		fmt.Println("No route to", des)
+		return
+	}
+	if des == r.Id {
+		fmt.Println("Destination", des)
+		return
+	}
+	if isAdjacent && isSource {
+		fmt.Println("Direct to", des)
+	}
+	// send to next hop
+	data := DataPacket{
+		Destination: des,
+		TTL:         ttl,
+	}
+	route := r.RoutingTable[des].Route
+	port := IdToPort[route[0]]
+	lAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:"+strconv.Itoa(r.Port+2000))
+	rAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:"+strconv.Itoa(port))
+	err := r.send(lAddr, rAddr, data)
+	if err != nil {
+		fmt.Println("Some error", err)
+		return
+	}
+}
+
+/*
+ * Refused to pass the node n.
+ */
+func (r *Router) setRefused(node string) {
+	_, ok := r.RoutingTable[node]
+	if ok == false {
+		r.RoutingTable[node] = TableValue{
+			Dist:    Unreachable,
+			Route:   []string{},
+			Refused: true,
+		}
+	} else {
+		r.RoutingTable[node] = TableValue{
+			Dist:    r.RoutingTable[node].Dist,
+			Route:   r.RoutingTable[node].Route,
+			Refused: true,
+		}
+	}
+}
+
+/*
+ * Specified priority route.
+ */
+func (r *Router) setPriorityRoute(route []string) {
+	des := route[len(route)-1]
+	if r.RoutingTable[des].Refused {
+		fmt.Println("Refused pass to", des)
+	}
+	r.RoutingTable[des] = TableValue{
+		Dist:    len(route),
+		Route:   route,
+		Refused: false,
+	}
+	// record at Logs
+	cloneRT := make(map[string]TableValue)
+	for k, v := range r.RoutingTable {
+		cloneRT[k] = v
+	}
+	newLog := RouterLog{
+		UpdateBy: r.Id,
+		Log:      cloneRT,
+	}
+	Logs = append(Logs, newLog)
+}
+
+/*
+ * print current routing table
+ *
+ * Format:
+ * Destination route
+ * 1 4,3
+ * 4 5,4
+ */
+func printRoutingTable(id string, routingTable map[string]TableValue) {
+	fmt.Println("Destination Dis Route")
+	for k, v := range routingTable {
+		// don't print itself
+		if k == id {
+			continue
+		}
+		fmt.Print("     ", k, "        ", v.Dist, "   ")
+		// don't print the destination node at route
 		for i := 0; i < len(v.Route); i++ {
 			fmt.Print(v.Route[i])
 			if i < len(v.Route)-1 {
@@ -188,10 +446,15 @@ func (r *Router) printRoutingTable() {
 }
 
 /*
- * Send a data pack to destination
+ * Display the statistics of route updates.
  */
-func (r *Router) sendPacket(des string) {
-
+func printStatistics(id string) {
+	for _, v := range Logs {
+		fmt.Println("Updated By", v.UpdateBy)
+		//fmt.Println(v.Log)
+		printRoutingTable(id, v.Log)
+		fmt.Println()
+	}
 }
 
 func main() {
@@ -214,14 +477,22 @@ func main() {
 	}
 	r.RoutingTable = make(map[string]TableValue, 10)
 	r.RoutingTable[r.Id] = TableValue{
-		Dist:  0,
-		Route: []string{},
+		Dist:    0,
+		Route:   []string{},
+		Refused: false,
 	}
-	// print router state
+
+	IdToPort = make(map[string]int, 10)
+	LiveTimer = make(map[int]int64, 10)
+	for _, v := range r.Neighbour {
+		LiveTimer[v] = 0
+	}
+	// print router's information
 	r.print()
 
 	go r.server()
 	go r.broadcast()
+	go r.checkNeighbour()
 
 	// get stdio from user
 	for {
@@ -248,12 +519,8 @@ func main() {
 			/*
 			 * Export the routes that reach to every destination node.
 			 * Each route occupies one line.
-			 * Format:
-			 * Destination route
-			 * 1 4,3
-			 * 4 5,4
 			 */
-			r.printRoutingTable()
+			printRoutingTable(r.Id, r.RoutingTable)
 		case "D":
 			/*
 			 * Send a data packet with a specified or default TTL value
@@ -262,8 +529,44 @@ func main() {
 			 */
 			if len(command) <= 1 {
 				fmt.Println("Not enough arguments to call function D")
+				break
 			}
-			r.sendPacket(command[1])
+			r.sendPacket(command[1], DefaultTTL, true)
+		case "P":
+			/*
+			 * Specified priority route.
+			 * The route to the destination nk should include the specified intermediate nodes n1 n2 ... .
+			 * n1 n2 ... nk : IDs of all K nodes and nk is the ID of destination node.
+			 * Replace possible shortest route with possible priority route after the node receives this command.
+			 */
+			k, _ := strconv.Atoi(command[1])
+			var priorityRoute []string
+			for i := 2; i < 2+k; i++ {
+				priorityRoute = append(priorityRoute, command[i])
+			}
+			r.setPriorityRoute(priorityRoute)
+		case "R":
+			/*
+			 * Refused to pass the node n.
+			 * After the node receives this command,
+			 * the node ignores all of the updates that contains node n in routing update.
+			 * R n
+			 */
+			if len(command) <= 1 {
+				fmt.Println("Not enough arguments to call function R")
+				break
+			}
+			r.setRefused(command[1])
+		case "S":
+			/*
+			 * Display the statistics of route updates.
+			 */
+			printStatistics(r.Id)
+		case "quit":
+			/*
+			 * close the router
+			 */
+			return
 		default:
 			fmt.Println("Unknown command")
 		}
