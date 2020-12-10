@@ -121,8 +121,8 @@ func (r *Router) server() {
 				fmt.Println("Some error", err)
 				continue
 			}
-			log.Println("Read a router message from", remoteAddr.Port)
-			fmt.Print("> ")
+			//log.Println("Read a router message from", remoteAddr.Port)
+			//fmt.Print("> ")
 
 			// reset neighbour's timer
 			now := time.Now().Unix()
@@ -147,6 +147,17 @@ func (r *Router) server() {
 					if r.RoutingTable[k].Refused {
 						continue
 					}
+					// split horizon with poison reversed
+					reBack := false
+					for _, hop := range v.Route {
+						if hop == r.Id {
+							reBack = true
+							//fmt.Println("find circle")
+						}
+					}
+					if reBack {
+						continue
+					}
 					// if next hop is not remote router and have a better router
 					if (len(r.RoutingTable[k].Route) == 0 ||
 						(len(r.RoutingTable[k].Route) > 0 && r.RoutingTable[k].Route[0] != remoteId)) &&
@@ -163,12 +174,12 @@ func (r *Router) server() {
 						if v.Dist == Unreachable || v.Dist+1 == Unreachable {
 							r.RoutingTable[k] = TableValue{
 								Dist:    Unreachable,
-								Route:   append([]string{remoteId}, v.Route[:]...),
+								Route:   append([]string{}, v.Route[:]...),
 								Refused: false,
 							}
 						} else {
 							r.RoutingTable[k] = TableValue{
-								Dist:    v.Dist+1,
+								Dist:    v.Dist + 1,
 								Route:   append([]string{remoteId}, v.Route[:]...),
 								Refused: false,
 							}
@@ -198,29 +209,35 @@ func (r *Router) server() {
 			err = decoder.Decode(&Message)
 			if err != nil {
 				fmt.Println("Some error", err)
+				fmt.Print("> ")
 				continue
 			}
 			// if TTL=0, discard it, otherwise continue to transmit it.
 			if Message.TTL == 0 {
 				fmt.Println("time exceeded", Message.Destination)
+				fmt.Print("> ")
 				continue
 			}
 			if r.Id == Message.Destination {
 				fmt.Println("Destination", Message.Destination)
+				fmt.Print("> ")
 				continue
 			}
 			_, hasRouteToDes := r.RoutingTable[Message.Destination]
-			if !hasRouteToDes {
+			if !hasRouteToDes || r.RoutingTable[Message.Destination].Dist == Unreachable {
 				fmt.Println("Dropped", Message.Destination)
+				fmt.Print("> ")
 				continue
 			}
 			// if refuse to pass that
 			if r.RoutingTable[Message.Destination].Refused {
 				fmt.Println("Refused to pass", Message.Destination)
+				fmt.Print("> ")
 				continue
 			}
 			fmt.Println("Forward to", Message.Destination)
-			go r.sendPacket(Message.Destination, Message.TTL-1, false)
+			fmt.Print("> ")
+			go r.sendPacket(Message.Destination, Message.TTL-1, false, remotePort-2000)
 			continue
 		}
 	}
@@ -331,9 +348,20 @@ func (r *Router) listNBsAlive() {
 /*
  * Send a data pack to destination
  */
-func (r *Router) sendPacket(des string, ttl int, isSource bool) {
+func (r *Router) sendPacket(des string, ttl int, isSource bool, from int) {
+	_, ok := r.RoutingTable[des]
+	if !ok {
+		fmt.Println("No route to", des)
+		if !isSource {
+			fmt.Println("> ")
+		}
+		return
+	}
 	if r.RoutingTable[des].Refused {
 		fmt.Println("Refuse to pass", des)
+		if !isSource {
+			fmt.Println("> ")
+		}
 		return
 	}
 	isAdjacent := false
@@ -341,34 +369,64 @@ func (r *Router) sendPacket(des string, ttl int, isSource bool) {
 	// check if the destination is adjacent node
 	// or this router has no adjacent node
 	for k, v := range r.RoutingTable {
-		hasAdjacent = true
-		if k == des && v.Dist == 1 {
-			isAdjacent = true
+		if v.Dist != Unreachable {
+			hasAdjacent = true
+			if k == des && v.Dist == 1 {
+				isAdjacent = true
+			}
 		}
 	}
 	if hasAdjacent == false {
 		fmt.Println("No route to", des)
+		if !isSource {
+			fmt.Println("> ")
+		}
 		return
 	}
 	if des == r.Id {
 		fmt.Println("Destination", des)
+		if !isSource {
+			fmt.Println("> ")
+		}
 		return
 	}
 	if isAdjacent && isSource {
 		fmt.Println("Direct to", des)
+		if !isSource {
+			fmt.Println("> ")
+		}
 	}
 	// send to next hop
 	data := DataPacket{
 		Destination: des,
 		TTL:         ttl,
 	}
+	dist := r.RoutingTable[des].Dist
 	route := r.RoutingTable[des].Route
+	if dist == Unreachable {
+		fmt.Println("Dropped", des)
+		if !isSource {
+			fmt.Println("> ")
+		}
+		return
+	}
 	port := IdToPort[route[0]]
+	// split horizon with poison reversed
+	if port == from {
+		fmt.Println("Dropped", des)
+		if !isSource {
+			fmt.Println("> ")
+		}
+		return
+	}
 	lAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:"+strconv.Itoa(r.Port+2000))
 	rAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:"+strconv.Itoa(port))
 	err := r.send(lAddr, rAddr, data)
 	if err != nil {
 		fmt.Println("Some error", err)
+		if !isSource {
+			fmt.Println("> ")
+		}
 		return
 	}
 }
@@ -531,7 +589,7 @@ func main() {
 				fmt.Println("Not enough arguments to call function D")
 				break
 			}
-			r.sendPacket(command[1], DefaultTTL, true)
+			r.sendPacket(command[1], DefaultTTL, true, 0)
 		case "P":
 			/*
 			 * Specified priority route.
