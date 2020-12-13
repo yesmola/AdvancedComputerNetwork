@@ -36,3 +36,27 @@ Run like ``` go run ./DV_algorithm/router.go 3,3003,3004```
 Maybe some bugs.
 Set priority route maybe some faults.
 
+## Project B: Reliable Data Transfer over UDP (RDT-UDP)
+Build a reliable transport protocol “RDT-UDP” over unreliable UDP. 
+Also, the protocol provide in-order, reliable delivery of UDP datagrams, 
+and must do so in the presence of packet loss, delay, corruption, duplication, and re-ordering.
+
+### Requirements
++ Use TCP-style connection maintenance, including establishment, maintains and
+  release.
++ The header includes the following fields:
+    1. Sequence Number (32 bits)
+    2. Acknowledgement Number (32 bits)
+    3. ConnectionID(16bits)(if exists)
+    4. A (ACK, 1 bit)
+    5. S (SYN, 1 bit)
+    6. F (FIN, 1 bit)
++ Avoid losing messages.
++ In case of lost message, detect and recover it.
++ Handle messages reordering.
++ (Optional) Add Congestion Control. The control algorithm is AIMD (like TCP)
++ The maximum UDP packet size is 524 bytes including a header (512 bytes for the
+  payload).
++ The maximum sequence and acknowledgment number should be 102400 and be reset
+  to zero whenever it reaches the maximum value.
+  
