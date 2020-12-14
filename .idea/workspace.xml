@@ -20,13 +20,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="1c1af4f1-081c-4b41-ae4b-b8574fbe22e0" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/RDT-UDP/client.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/RDT-UDP/config.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/RDT-UDP/server.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/RDT-UDP/test.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/RDT-UDP/out.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RDT-UDP/client.go" beforeDir="false" afterPath="$PROJECT_DIR$/RDT-UDP/client.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RDT-UDP/config.go" beforeDir="false" afterPath="$PROJECT_DIR$/RDT-UDP/config.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RDT-UDP/server.go" beforeDir="false" afterPath="$PROJECT_DIR$/RDT-UDP/server.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RDT-UDP/test.txt" beforeDir="false" afterPath="$PROJECT_DIR$/RDT-UDP/test.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -90,6 +89,10 @@
     <option name="ADD_EXTERNAL_FILES_SILENTLY" value="true" />
   </component>
   <component name="WindowStateProjectService">
+    <state x="100" y="125" width="1592" height="833" key="DiffContextDialog" timestamp="1607963057628">
+      <screen x="0" y="25" width="1792" height="1033" />
+    </state>
+    <state x="100" y="125" width="1592" height="833" key="DiffContextDialog/0.25.1792.1033@0.25.1792.1033" timestamp="1607963057628" />
     <state x="698" y="236" key="SettingsEditor" timestamp="1607342125914">
       <screen x="0" y="25" width="1792" height="1033" />
     </state>
@@ -98,9 +101,9 @@
       <screen x="0" y="25" width="1792" height="1033" />
     </state>
     <state x="429" y="144" key="com.intellij.openapi.editor.actions.MultiplePasteAction$ClipboardContentChooser/0.25.1792.1033@0.25.1792.1033" timestamp="1607845707494" />
-    <state x="561" y="254" width="670" height="676" key="search.everywhere.popup" timestamp="1607411704102">
+    <state x="561" y="254" width="670" height="676" key="search.everywhere.popup" timestamp="1607937773510">
       <screen x="0" y="25" width="1792" height="1033" />
     </state>
-    <state x="561" y="254" width="670" height="676" key="search.everywhere.popup/0.25.1792.1033@0.25.1792.1033" timestamp="1607411704102" />
+    <state x="561" y="254" width="670" height="676" key="search.everywhere.popup/0.25.1792.1033@0.25.1792.1033" timestamp="1607937773510" />
   </component>
 </project>
