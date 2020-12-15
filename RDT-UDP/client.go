@@ -19,19 +19,18 @@ var fileSize uint32
 var cReturnCh chan bool
 var timer bool
 var sendAll bool
+var sendCnt uint32
 
 type TCPClient struct {
-	State   int
-	WINSize uint32
-	BaseSeq uint32
-	NextSeq uint32
-	SendAck uint32 // send ack number to server
-	Timer   time.Time
-
+	State        int
+	WINSize      uint32
+	BaseSeq      uint32
+	NextSeq      uint32
+	SendAck      uint32 // send ack number to server
+	Timer        time.Time
+	Buf          Queue
 	ConnectionId uint16
-	Packet       Segment
 
-	Buf       Queue
 	synCh     chan Segment
 	dataCh    chan uint32
 	timeOutCh chan bool
@@ -50,7 +49,7 @@ func (c *TCPClient) initialize() {
 	c.BaseSeq = 0
 	c.NextSeq = c.BaseSeq
 	c.SendAck = 0
-
+	c.Buf = *GetQueue()
 	c.ConnectionId = uint16(clientId)
 
 	c.synCh = make(chan Segment, 1)
@@ -165,6 +164,7 @@ func (c *TCPClient) sendSYN(conn *net.UDPConn, seq uint32) error {
  *
  */
 func (c *TCPClient) sendData(conn *net.UDPConn, ack uint32, seq uint32) error {
+	sendCnt++
 	var chunkEnd = seq - 1 + 512
 	if chunkEnd > fileSize {
 		chunkEnd = fileSize
@@ -177,6 +177,7 @@ func (c *TCPClient) sendData(conn *net.UDPConn, ack uint32, seq uint32) error {
 		Flag:         ACK,
 		Data:         sendData,
 	}
+	c.Buf.Push(sPacket)
 	//showSegment(sPacket)
 	var buffer bytes.Buffer
 	encoder := gob.NewEncoder(&buffer)
@@ -243,6 +244,7 @@ func (c *TCPClient) sendLastACK(conn *net.UDPConn, ack uint32, seq uint32) error
 	}
 	return nil
 }
+
 func (c *TCPClient) checkTimer() {
 	timer = true
 	for {
@@ -299,7 +301,7 @@ func (c *TCPClient) listen(conn *net.UDPConn) {
 			fmt.Println("Client's state", c.State)
 			c.SendAck = packet.Seq + 1
 			if c.State == Maintain {
-				fmt.Println("get a ack", packet.Ack,"and base sequence number:",c.BaseSeq)
+				fmt.Println("get a ack", packet.Ack, "and base sequence number:", c.BaseSeq)
 				if packet.Ack > c.BaseSeq {
 					c.BaseSeq = packet.Ack
 				}
@@ -307,7 +309,7 @@ func (c *TCPClient) listen(conn *net.UDPConn) {
 					fmt.Println("base seq:", c.BaseSeq, "next seq", c.NextSeq)
 					//stop timer
 					fmt.Println("Transmission finish")
-					c.finCh<-true
+					c.finCh <- true
 					timer = false
 				} else {
 					c.Timer = time.Now()
@@ -315,7 +317,7 @@ func (c *TCPClient) listen(conn *net.UDPConn) {
 			} else if c.State == Release {
 				if packet.Ack > c.BaseSeq {
 					// disconnect successfully
-					fmt.Println("get a disconnection ack",packet.Ack)
+					fmt.Println("get a disconnection ack", packet.Ack)
 					timer = false
 				}
 			}
@@ -372,12 +374,21 @@ func main() {
 	clientId, _ = strconv.Atoi(os.Args[1])
 	// load the file
 	fileData, fileSize = loadFile(os.Args[2])
+	var chunkCnt uint32
+	if fileSize%512 == 0 {
+		chunkCnt = fileSize / 512
+	} else {
+		chunkCnt = fileSize/512 + 1
+	}
+	var sendTime int64
+	sendTime = time.Now().UnixNano() / 1e6
 
 	var c TCPClient
 	// initialization
 	c.initialize()
 	cReturnCh = make(chan bool, 1)
 	sendAll = false
+	sendCnt = 0
 	// construct a connection
 	rAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:"+strconv.Itoa(ServerPort))
 	conn, err := net.DialUDP("udp", nil, rAddr)
@@ -394,5 +405,7 @@ func main() {
 	go c.listen(conn)
 
 	<-cReturnCh
+	log.Println("Send start at:", sendTime)
+	log.Println("chunk:", chunkCnt, "send:", sendCnt, "Good put:", float64(chunkCnt)/float64(sendCnt))
 	return
 }

@@ -59,14 +59,23 @@ func (queue *Queue) Push(data interface{}) {
 	queue.list.PushBack(data)
 }
 
-func (queue *Queue) Pop() (interface{}, error) {
+func (queue *Queue) Front() interface{} {
+	queue.mutex.Lock()
+	defer queue.mutex.Unlock()
+	if element := queue.list.Front(); element != nil {
+		return element.Value
+	}
+	return nil
+}
+
+func (queue *Queue) Pop() error {
 	queue.mutex.Lock()
 	defer queue.mutex.Unlock()
 	if element := queue.list.Front(); element != nil {
 		queue.list.Remove(element)
-		return element.Value, nil
+		return nil
 	}
-	return nil, errors.New("pop failed")
+	return errors.New("pop failed")
 }
 
 func (queue *Queue) Clear() {

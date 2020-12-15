@@ -21,8 +21,9 @@ type TCPServer struct {
 	Port      int
 	NextSeq   uint32
 	ExpectSeq uint32
+	WINSize   uint32
 
-	Packet  Segment
+	Buf     Queue
 	mu      sync.Mutex
 	Clients []Client
 }
@@ -40,6 +41,8 @@ func (s *TCPServer) Initialize(IP string, port int) {
 	s.Port = port
 	s.NextSeq = 0
 	s.ExpectSeq = 0
+	s.WINSize = 32 * MSS
+	s.Buf = *GetQueue()
 	s.mu.Unlock()
 }
 
@@ -79,13 +82,41 @@ func (s *TCPServer) Listen(ser *net.UDPConn) {
 			fmt.Println("receive a data packet from", remoteAddr)
 			fmt.Println("expected seq:", s.ExpectSeq, "received seq:", packet.Seq)
 			rand.Seed(time.Now().UnixNano())
-			if rand.Intn(100) > 95 {
+			if rand.Intn(100) > 99 {
 				fmt.Println("drop the packet")
 				continue
 			}
 			s.mu.Lock()
 			if packet.Seq == s.ExpectSeq {
-				s.sendACK(ser, packet)
+				rcvFile = append(rcvFile, packet.Data[:]...)
+				s.ExpectSeq = packet.Seq + uint32(len(packet.Data))
+				s.sendACK(ser, s.NextSeq, s.ExpectSeq, packet.ConnectionID)
+				s.NextSeq++
+				// read from buffer
+				if s.Buf.Len() == 0 {
+					s.mu.Unlock()
+					continue
+				}
+				front := s.Buf.Front().(Segment)
+				for front.Seq == s.ExpectSeq {
+					rcvFile = append(rcvFile, front.Data[:]...)
+					err = s.Buf.Pop()
+					if err != nil {
+						log.Println("Some error", err)
+					}
+					if s.Buf.Len() == 0 {
+						break
+					}
+					front = s.Buf.Front().(Segment)
+				}
+			} else if packet.Seq > s.ExpectSeq {
+				// buffer the packet
+				if uint32(s.Buf.Len())*MSS > s.WINSize {
+					// refuse the packet
+				} else {
+					s.sendACK(ser, s.NextSeq, packet.Seq+uint32(len(packet.Data)), packet.ConnectionID)
+					s.Buf.Push(packet)
+				}
 			}
 			s.mu.Unlock()
 		}
@@ -101,7 +132,9 @@ func (s *TCPServer) Listen(ser *net.UDPConn) {
 		if packet.Flag == FIN {
 			log.Println("receive a disconnection request from", remoteAddr)
 			s.mu.Lock()
-			s.sendACK(ser, packet)
+			s.ExpectSeq = packet.Seq + 1
+			s.sendACK(ser, s.NextSeq, s.ExpectSeq, packet.ConnectionID)
+			s.NextSeq++
 			s.sendFIN(ser, packet)
 			s.mu.Unlock()
 		}
@@ -132,22 +165,15 @@ func (s *TCPServer) sendSYN(ser *net.UDPConn, rPacket Segment) {
 	}
 }
 
-func (s *TCPServer) sendACK(ser *net.UDPConn, rPacket Segment) {
-	rcvFile = append(rcvFile, rPacket.Data[:]...)
-	if uint32(len(rPacket.Data)) == 0 {
-		s.ExpectSeq = rPacket.Seq + 1
-	} else {
-		s.ExpectSeq = rPacket.Seq + uint32(len(rPacket.Data))
-	}
+func (s *TCPServer) sendACK(ser *net.UDPConn, seq uint32, ack uint32, connectionId uint16) {
 	sPacket := Segment{
-		Seq:          s.NextSeq,
-		Ack:          s.ExpectSeq,
-		ConnectionID: rPacket.ConnectionID,
+		Seq:          seq,
+		Ack:          ack,
+		ConnectionID: connectionId,
 		Flag:         ACK,
 		Data:         []byte{},
 	}
-	s.NextSeq++
-	fmt.Println("Server sends a ACK", s.ExpectSeq)
+	fmt.Println("Server sends a ACK", ack)
 	var buffer bytes.Buffer
 	encoder := gob.NewEncoder(&buffer)
 	err := encoder.Encode(sPacket)
@@ -224,5 +250,6 @@ func main() {
 	go s.Listen(ser)
 
 	<-sReturnCh
+	log.Println("Receive end at:", time.Now().UnixNano()/1e6)
 	return
 }
