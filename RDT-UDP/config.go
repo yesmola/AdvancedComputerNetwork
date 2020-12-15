@@ -11,7 +11,9 @@ import (
 const (
 	MSS               = 512
 	MaxSequenceNumber = 102400
-	TimeOut = 1*time.Second
+	TimeOut           = 1000 * time.Millisecond
+	InitialSSThresh   = 10000
+	BufSize           = 200
 )
 
 const (
@@ -23,6 +25,11 @@ const (
 	Establish = iota
 	Maintain
 	Release
+)
+
+const (
+	SlowStart = iota
+	CongestionAvoidance
 )
 
 type Segment struct {

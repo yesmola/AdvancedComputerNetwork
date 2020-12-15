@@ -60,3 +60,9 @@ and must do so in the presence of packet loss, delay, corruption, duplication, a
 + The maximum sequence and acknowledgment number should be 102400 and be reset
   to zero whenever it reaches the maximum value.
   
+ ### Run
+ Run like 
+ 
+``` go run -race server.go config.go ```
+
+```go run -race client.go config.go 1 test.txt ```

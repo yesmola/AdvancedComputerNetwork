@@ -26,6 +26,7 @@
       <change beforePath="$PROJECT_DIR$/RDT-UDP/out.txt" beforeDir="false" afterPath="$PROJECT_DIR$/RDT-UDP/out.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/RDT-UDP/server.go" beforeDir="false" afterPath="$PROJECT_DIR$/RDT-UDP/server.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/RDT-UDP/test.txt" beforeDir="false" afterPath="$PROJECT_DIR$/RDT-UDP/test.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -89,10 +90,10 @@
     <option name="ADD_EXTERNAL_FILES_SILENTLY" value="true" />
   </component>
   <component name="WindowStateProjectService">
-    <state x="100" y="125" width="1592" height="833" key="DiffContextDialog" timestamp="1607963057628">
+    <state x="100" y="125" width="1592" height="833" key="DiffContextDialog" timestamp="1608031416720">
       <screen x="0" y="25" width="1792" height="1033" />
     </state>
-    <state x="100" y="125" width="1592" height="833" key="DiffContextDialog/0.25.1792.1033@0.25.1792.1033" timestamp="1607963057628" />
+    <state x="100" y="125" width="1592" height="833" key="DiffContextDialog/0.25.1792.1033@0.25.1792.1033" timestamp="1608031416720" />
     <state x="698" y="236" key="SettingsEditor" timestamp="1607342125914">
       <screen x="0" y="25" width="1792" height="1033" />
     </state>
